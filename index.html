@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Traffic Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        .chatbot-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.chatbot-container {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 350px;
+    height: 500px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    z-index: 1000;
+    display: none;
+}
+.chatbot-header {
+    padding: 15px;
+    background-color: #0d6efd;
+    color: white;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.chatbot-messages {
+    height: 380px;
+    overflow-y: auto;
+    padding: 15px;
+}
+.chatbot-input {
+    padding: 15px;
+    border-top: 1px solid #eee;
+}
+.message {
+    margin-bottom: 10px;
+    max-width: 80%;
+}
+.bot-message {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 10px;
+    margin-right: auto;
+}
+.user-message {
+    background-color: #0d6efd;
+    color: white;
+    padding: 10px;
+    border-radius: 10px;
+    margin-left: auto;
+}
+.message-time {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 5px;
+}
+
+        .traffic-light {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin: 10px auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        .red { background-color: #ff0000; }
+        .yellow { background-color: #ffff00; }
+        .green { background-color: #00ff00; }
+        .violation-card {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 5px;
+        }
+        .ml-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .camera-feed {
+            background-color: #000;
+            height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            overflow: hidden;
+            border-radius: 5px;
+        }
+        .camera-feed img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .status-value {
+            font-weight: bold;
+            color: #0d6efd;
+        }
+        .control-panel {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+        }
+        .control-panel button {
+            margin-right: 10px;
+        }
+        .error-message {
+            color: #dc3545;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            display: none;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading-spinner {
+            width: 3rem;
+            height: 3rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">AI Traffic Management System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#dashboard">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link " href="#Predictions">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#violations">Violations</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div id="error-message" class="error-message"></div>
+        <div id="loading" class="loading">
+            <div class="spinner-border loading-spinner text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <button class="btn btn-primary" onclick="updateTrafficStatus()">Update Traffic</button>
+            <button class="btn btn-success" onclick="optimizeSignals()">Optimize Signals</button>
+            <button class="btn btn-danger" onclick="emergencyOverride()">Emergency Override</button>
+        </div>
+
+        <div class="ml-info">
+            <h3>ML Model Information</h3>
+            <p>This system uses a Decision Tree model to predict traffic density based on:</p>
+            <ul>
+                <li>Time of Day</li>
+                <li>Day of Week</li>
+                <li>Number of Vehicles</li>
+                <li>Previous Traffic Density</li>
+            </ul>
+            <p>Signal Optimization Rules:</p>
+            <ul>
+                <li>High Density (>70 vehicles): Green Light (60-90 seconds)</li>
+                <li>Medium Density (40-70 vehicles): Yellow Light (30-45 seconds)</li>
+                <li>Low Density (<40 vehicles): Red Light (30 seconds)</li>
+            </ul>
+        </div>
+
+        <div class="row">
+            <!-- Traffic Status -->
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Traffic Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="junction1-status">
+                            <h6>Junction 1</h6>
+                            <div class="traffic-light" id="junction1-light"></div>
+                            <p>Density: <span id="junction1-density" class="status-value">Medium</span></p>
+                            <p>Wait Time: <span id="junction1-wait" class="status-value">45 seconds</span></p>
+                            <p>Vehicles: <span id="junction1-vehicles" class="status-value">23</span></p>
+                        </div>
+                        <hr>
+                        <div id="junction2-status">
+                            <h6>Junction 2</h6>
+                            <div class="traffic-light" id="junction2-light"></div>
+                            <p>Density: <span id="junction2-density" class="status-value">Low</span></p>
+                            <p>Wait Time: <span id="junction2-wait" class="status-value">30 seconds</span></p>
+                            <p>Vehicles: <span id="junction2-vehicles" class="status-value">15</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Traffic Map</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="map"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera Feed -->
+            <div class="col-md-12">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">CCTV Feed</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="camera-feed">
+                            <img src="/video_feed" alt="Camera Feed" onerror="handleCameraError(this)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Violations -->
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Recent Violations</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="violations-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chatbot -->
+<button class="chatbot-toggle" onclick="toggleChatbot()">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+</button>
+
+<div class="chatbot-container" id="chatbot">
+    <div class="chatbot-header">
+        <div>Traffic Assistant</div>
+        <button class="btn-close btn-close-white" onclick="toggleChatbot()"></button>
+    </div>
+    <div class="chatbot-messages" id="chatMessages"></div>
+    <div class="chatbot-input">
+        <div class="input-group">
+            <input type="text" class="form-control" id="messageInput" placeholder="Type your message...">
+            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        let map;
+        let markers = {};
+        let mapInitialized = false;
+
+        function handleCameraError(img) {
+            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgZmlsbD0iIzAwMCIvPjx0ZXh0IHg9IjMyMCIgeT0iMjQwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiNmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkNhbWVyYSBOb3QgQXZhaWxhYmxlPC90ZXh0Pjwvc3ZnPg==';
+            showError('Camera feed not available');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function initMap() {
+            try {
+                if (!mapInitialized) {
+                    map = L.map('map').setView([51.505, -0.09], 13);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(map);
+                    mapInitialized = true;
+                }
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                showError('Failed to initialize map');
+            }
+        }
+
+        function updateTrafficLight(junctionId, signal) {
+            try {
+                const light = document.getElementById(`${junctionId}-light`);
+                light.className = 'traffic-light';
+                light.classList.add(signal.toLowerCase());
+            } catch (error) {
+                console.error('Error updating traffic light:', error);
+            }
+        }
+
+        function updateJunctionData(junctionId, data) {
+            document.getElementById(`${junctionId}-density`).textContent = data.density;
+            document.getElementById(`${junctionId}-wait`).textContent = data.wait_time;
+            document.getElementById(`${junctionId}-vehicles`).textContent = data.vehicles;
+            updateTrafficLight(junctionId, data.signal);
+        }
+
+        function updateTrafficStatus() {
+            showLoading();
+            fetch('/update_traffic', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    updateJunctionData('junction1', data.junction1);
+                    updateJunctionData('junction2', data.junction2);
+                    if (data.junction1.location && data.junction2.location) {
+                        updateMapMarkers(data);
+                    }
+                } else {
+                    throw new Error(data.message || 'Failed to update traffic status');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError(error.message);
+            })
+            .finally(() => {
+                hideLoading();
+            });
+        }
+
+        function optimizeSignals() {
+            showLoading();
+            fetch('/optimize_signals', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    updateJunctionData('junction1', data.junction1);
+                    updateJunctionData('junction2', data.junction2);
+                    updateMapMarkers(data);
+                    showError('Signals optimized successfully');
+                } else {
+                    throw new Error(data.message || 'Failed to optimize signals');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError('Failed to optimize signals: ' + error.message);
+            })
+            .finally(() => {
+                hideLoading();
+            });
+        }
+
+        function emergencyOverride() {
+            showLoading();
+            fetch('/emergency_override', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    updateJunctionData('junction1', data.junction1);
+                    updateJunctionData('junction2', data.junction2);
+                    updateMapMarkers(data);
+                    showError('Emergency override activated');
+                } else {
+                    throw new Error(data.message || 'Failed to activate emergency override');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError('Failed to activate emergency override: ' + error.message);
+            })
+            .finally(() => {
+                hideLoading();
+            });
+        }
+
+        function updateMapMarkers(data) {
+            try {
+                if (!mapInitialized) {
+                    initMap();
+                }
+                
+                // Update Junction 1 marker
+                if (markers.junction1) {
+                    markers.junction1.setLatLng(data.junction1.location);
+                } else {
+                    markers.junction1 = L.marker(data.junction1.location).addTo(map);
+                }
+                markers.junction1.bindPopup(`Junction 1<br>Density: ${data.junction1.density}<br>Signal: ${data.junction1.signal}`);
+
+                // Update Junction 2 marker
+                if (markers.junction2) {
+                    markers.junction2.setLatLng(data.junction2.location);
+                } else {
+                    markers.junction2 = L.marker(data.junction2.location).addTo(map);
+                }
+                markers.junction2.bindPopup(`Junction 2<br>Density: ${data.junction2.density}<br>Signal: ${data.junction2.signal}`);
+            } catch (error) {
+                console.error('Error updating map markers:', error);
+                showError('Failed to update map markers');
+            }
+        }
+
+        function updateViolations() {
+            fetch('/violations')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === 'success') {
+                        const violationsList = document.getElementById('violations-list');
+                        violationsList.innerHTML = '';
+                        
+                        data.violations.forEach(violation => {
+                            const violationCard = document.createElement('div');
+                            violationCard.className = 'violation-card';
+                            violationCard.innerHTML = `
+                                <strong>${violation.type}</strong><br>
+                                Location: ${violation.location}<br>
+                                Time: ${violation.time}
+                            `;
+                            violationsList.appendChild(violationCard);
+                        });
+                    } else {
+                        throw new Error(data.message || 'Failed to fetch violations');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating violations:', error);
+                    showError('Failed to update violations: ' + error.message);
+                });
+        }
+
+        // Chatbot functions
+function toggleChatbot() {
+    const chatbot = document.getElementById('chatbot');
+    chatbot.style.display = chatbot.style.display === 'none' ? 'block' : 'none';
+    if (chatbot.style.display === 'block') {
+        document.getElementById('messageInput').focus();
+    }
+}
+
+function addMessage(text, isBot = false) {
+    const messagesDiv = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${isBot ? 'bot-message' : 'user-message'}`;
+    messageDiv.innerHTML = `
+        ${text}
+        <div class="message-time">${new Date().toLocaleTimeString()}</div>
+    `;
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    
+    if (message) {
+        addMessage(message, false);
+        input.value = '';
+        
+        fetch('/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ message: message })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                addMessage(data.response, true);
+            } else {
+                throw new Error(data.message || 'Failed to get response');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            addMessage('Sorry, I encountered an error. Please try again.', true);
+        });
+    }
+}
+
+// Event listener for Enter key in message input
+document.getElementById('messageInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        sendMessage();
+    }
+});
+
+// Initialize chatbot
+document.getElementById('chatbot').style.display = 'none';
+addMessage("Hello! I'm your traffic assistant. How can I help you today?", true);
+
+
+        // Initialize map
+        initMap();
+
+        // Update traffic status every 5 seconds
+        setInterval(updateTrafficStatus, 5000);
+
+        // Update violations every 10 seconds
+        setInterval(updateViolations, 10000);
+
+        // Initial updates
+        updateTrafficStatus();
+        updateViolations();
+    </script>
+</body>
+</html>
