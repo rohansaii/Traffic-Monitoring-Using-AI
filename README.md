@@ -79,7 +79,7 @@ An AI-based Traffic Monitoring and Management System using Flask for the backend
    ```bash
    pip install flask flask-cors opencv-python numpy
 2. **Run the application**:
-```bash
+
    python app.py
 
 3. **Open in browser**:
